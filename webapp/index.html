@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Skynet Run</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+    <h1>Skynet Run</h1>
+    <canvas id="gameCanvas" width="1600" height="400"></canvas>
+    <div id="ui">
+        <p id="score">Score: 0</p>
+        <p id="highScore">High Score: -</p>
+        <button id="retryBtn" style="display:none;">Retry</button>
+    </div>
+    <div id="citationBox" style="display:none;">
+        <p id="citationText"></p>
+        <a id="citationSource" href="#" target="_blank" rel="noopener noreferrer">Source</a>
+    </div>
+    <video id="obstacleVideo" src="obstacle.mp4" autoplay loop muted playsinline style="display:none;"></video>
+    <script src="game.js"></script>
+</body>
+
+</html>

@@ -1,98 +1,219 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
+const obstacleVideo = document.getElementById('obstacleVideo');
+const dinoImage = new Image();
+dinoImage.src = 'dino.png'; // Make sure it's the correct file name
 
-// Game settings
-const gravity = 0.6;
-const groundHeight = 20;
+const scoreDisplay = document.getElementById('score');
+const highScoreDisplay = document.getElementById('highScore');
+const retryBtn = document.getElementById('retryBtn');
+
+let gravity = 0.5;
+let groundHeight = 40;
 let isGameOver = false;
+let score = 0;
+let highScoreData = JSON.parse(localStorage.getItem('dinoHighScore')) || { score: 0, name: "Nobody" };
+let speed = 12;
+let speedIncrease = 0.002;
+let frame = 0;
 
-// Dino player
+const obstacleSize = 80;
+const dinoSize = 80;
+
+let lastScoreShown = -1;
+
+const videoBuffer = document.createElement('canvas');
+videoBuffer.width = obstacleSize;
+videoBuffer.height = obstacleSize;
+const videoCtx = videoBuffer.getContext('2d');
+
+highScoreDisplay.textContent = `High Score: ${highScoreData.score} (${highScoreData.name})`;
+
+let citations = [];
+
+fetch('./citations.json')
+    .then(response => response.json())
+    .then(data => {
+        citations = data;
+    })
+    .catch(err => {
+        console.error('Failed to load citations:', err);
+    });
+
 const dino = {
-  x: 50,
-  y: canvas.height - groundHeight - 40,
-  width: 40,
-  height: 40,
-  velocityY: 0,
-  isJumping: false
+    x: 50,
+    y: canvas.height - groundHeight - dinoSize,
+    width: dinoSize,
+    height: dinoSize,
+    velocityY: 0,
+    isJumping: false
 };
 
-// Obstacle
-const obstacle = {
-  x: canvas.width,
-  y: canvas.height - groundHeight - 30,
-  width: 20,
-  height: 30,
-  speed: 6
-};
-
-// Handle jump
 document.addEventListener('keydown', (e) => {
-  if (e.code === 'Space' && !dino.isJumping) {
-    dino.velocityY = -12;
-    dino.isJumping = true;
-  }
+    if (e.code === 'Space' && !dino.isJumping && !isGameOver) {
+        dino.velocityY = -12;
+        dino.isJumping = true;
+    }
 });
 
+retryBtn.addEventListener('click', () => {
+    resetGame();
+});
+
+const obstacles = [];
+let nextObstacleFrame = 0;
+
+function maybeSpawnObstacle() {
+    if (frame >= nextObstacleFrame) {
+        const minFrames = 60;  // 1 second at 60fps
+        const maxFrames = 150; // up to 2.5 seconds
+        const framesUntilNext = Math.floor(Math.random() * (maxFrames - minFrames)) + minFrames;
+        nextObstacleFrame = frame + framesUntilNext;
+
+        obstacles.push({
+            x: canvas.width,
+            y: canvas.height - groundHeight - obstacleSize,
+            width: obstacleSize,
+            height: obstacleSize,
+        });
+    }
+}
+
 function update() {
-  // Apply gravity
-  dino.velocityY += gravity;
-  dino.y += dino.velocityY;
+    frame++;
+    score = Math.floor(frame / 5);
 
-  // Ground collision
-  if (dino.y >= canvas.height - groundHeight - dino.height) {
-    dino.y = canvas.height - groundHeight - dino.height;
-    dino.velocityY = 0;
-    dino.isJumping = false;
-  }
+    if (score !== lastScoreShown) {
+        scoreDisplay.textContent = `Score: ${score}`;
+        lastScoreShown = score;
+    }
+    speed += speedIncrease;
 
-  // Move obstacle
-  obstacle.x -= obstacle.speed;
-  if (obstacle.x + obstacle.width < 0) {
-    obstacle.x = canvas.width + Math.random() * 200;
-  }
+    dino.velocityY += gravity;
+    dino.y += dino.velocityY;
 
-  // Collision detection
-  if (
-    dino.x < obstacle.x + obstacle.width &&
-    dino.x + dino.width > obstacle.x &&
-    dino.y < obstacle.y + obstacle.height &&
-    dino.y + dino.height > obstacle.y
-  ) {
-    isGameOver = true;
-  }
+    if (dino.y >= canvas.height - groundHeight - dino.height) {
+        dino.y = canvas.height - groundHeight - dino.height;
+        dino.velocityY = 0;
+        dino.isJumping = false;
+    }
+
+    maybeSpawnObstacle();
+
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+        const obs = obstacles[i];
+        obs.x -= speed;
+
+        // Remove off-screen obstacles
+        if (obs.x + obs.width < 0) {
+            obstacles.splice(i, 1);
+            continue;
+        }
+
+        // Collision detection
+        if (
+            dino.x < obs.x + obs.width &&
+            dino.x + dino.width > obs.x &&
+            dino.y < obs.y + obs.height &&
+            dino.y + dino.height > obs.y
+        ) {
+            endGame();
+        }
+    }
 }
 
 function draw() {
-  // Clear canvas
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+    canvas.width = canvas.width; // clear
 
-  // Draw ground
-  ctx.fillStyle = '#888';
-  ctx.fillRect(0, canvas.height - groundHeight, canvas.width, groundHeight);
+    ctx.fillStyle = '#888';
+    ctx.fillRect(0, canvas.height - groundHeight, canvas.width, groundHeight);
 
-  // Draw dino
-  ctx.fillStyle = '#0a0';
-  ctx.fillRect(dino.x, dino.y, dino.width, dino.height);
+    ctx.drawImage(dinoImage, dino.x, dino.y, dino.width, dino.height);
 
-  // Draw obstacle
-  ctx.fillStyle = '#a00';
-  ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+    for (let obs of obstacles) {
+        if (obstacleVideo.readyState >= 2) {
+            ctx.drawImage(obstacleVideo, obs.x, obs.y, obs.width, obs.height);
+        } else {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+        }
+    }
 
-  if (isGameOver) {
-    ctx.fillStyle = '#000';
-    ctx.font = '24px sans-serif';
-    ctx.fillText('Game Over!', canvas.width / 2 - 60, canvas.height / 2);
-  }
+    if (isGameOver) {
+        ctx.fillStyle = '#000';
+        ctx.font = '24px sans-serif';
+        ctx.fillText('Game Over!', canvas.width / 2 - 60, canvas.height / 2 - 20);
+    }
 }
 
-function loop() {
-  if (!isGameOver) {
-    update();
-    draw();
+let lastTime = 0;
+const fpsInterval = 1000 / 60;
+
+function loop(now) {
+    if (!lastTime) lastTime = now;
+    const elapsed = now - lastTime;
+
+    if (elapsed > fpsInterval) {
+        lastTime = now - (elapsed % fpsInterval);
+
+        if (!isGameOver) {
+            update();
+        }
+        draw();
+    }
+
     requestAnimationFrame(loop);
-  } else {
-    draw(); // Show final frame
-  }
 }
 
-loop();
+function endGame() {
+    isGameOver = true;
+    retryBtn.style.display = 'inline';
+
+    if (score > highScoreData.score) {
+        const name = prompt(`New High Score! Enter your name:`) || 'Anonymous';
+        highScoreData = { score, name };
+        localStorage.setItem('dinoHighScore', JSON.stringify(highScoreData));
+        highScoreDisplay.textContent = `High Score: ${score} (${name})`;
+    }
+
+    if (citations.length > 0) {
+        const randomCitation = citations[Math.floor(Math.random() * citations.length)];
+        const citationBox = document.getElementById('citationBox');
+        const citationText = document.getElementById('citationText');
+        const citationSource = document.getElementById('citationSource');
+
+        citationText.textContent = `"${randomCitation.citation}"`;
+        citationSource.href = randomCitation.source;
+        citationSource.textContent = 'Source';
+
+        citationBox.style.display = 'block';
+    }
+}
+
+function resetGame() {
+    score = 0;
+    frame = 0;
+    speed = 12;
+    isGameOver = false;
+    retryBtn.style.display = 'none';
+
+    // const citationBox = document.getElementById('citationBox');
+    // citationBox.style.display = 'none';
+
+    dino.y = canvas.height - groundHeight - dino.height;
+    dino.velocityY = 0;
+    dino.isJumping = false;
+
+    obstacles.length = 0;  // clear obstacles
+    nextObstacleFrame = 0;
+
+    requestAnimationFrame(loop);
+}
+
+dinoImage.onload = () => {
+    if (obstacleVideo.readyState >= 2) {
+        requestAnimationFrame(loop);
+    } else {
+        obstacleVideo.oncanplay = () => requestAnimationFrame(loop);
+    }
+};
